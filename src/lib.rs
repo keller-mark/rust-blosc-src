@@ -5,6 +5,9 @@
 
 include!("bindgen.rs");
 
+#[cfg(target_arch = "wasm32")]
+mod wasm_shim;
+
 #[cfg(feature = "zlib")]
 extern crate libz_sys;
 
