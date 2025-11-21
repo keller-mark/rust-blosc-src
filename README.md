@@ -20,3 +20,16 @@ When these are requested they will be built from source and available for use by
 As this crate only provides FFI, the [examples from `c-blosc`](https://github.com/Blosc/c-blosc/tree/main/examples) also functions as examples for this crate. A simple roundtrip is included in [`test.rs`](tests/test.rs).
 
 The developer must take special care in dealing with memory and in multi-threaded environments. It is recommended to create and use a safe interface instead of this crate directly.
+
+## Development
+
+To clone the submodules:
+
+```sh
+# after git clone
+cd rust-blosc-src
+git submodule update --init --recursive
+
+cargo install bindgen-cli
+bash bindgen.sh
+```
