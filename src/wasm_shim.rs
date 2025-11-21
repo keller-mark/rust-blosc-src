@@ -222,3 +222,23 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strcmp(
     }
     (*s1 as c_int) - (*s2 as c_int)
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn sprintf(
+    dest: *mut c_char,
+    format: *const c_char,
+) -> c_int {
+    // Simple implementation: copy format string to dest, ignoring format specifiers and arguments.
+    // This avoids the need for variadic support in Rust, which is unstable/complex for WASM targets.
+    let mut src = format as *const u8;
+    let mut dst = dest as *mut u8;
+    let mut len = 0;
+    while *src != 0 {
+        *dst = *src;
+        src = src.add(1);
+        dst = dst.add(1);
+        len += 1;
+    }
+    *dst = 0;
+    len as c_int
+}
