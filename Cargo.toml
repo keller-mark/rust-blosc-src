@@ -24,6 +24,7 @@ zlib = ["dep:libz-sys"]
 zstd = ["dep:zstd-sys"]
 lz4 = ["dep:lz4-sys"]
 snappy = ["dep:snappy_src"]
+no_wasm_shim = [] # Disable wasm shims (in case your wasm toolchain includes a C stdlib).
 
 [build-dependencies]
 cc = "1.0"

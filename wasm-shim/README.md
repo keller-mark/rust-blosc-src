@@ -1,0 +1,1 @@
+Reference: https://github.com/gyscos/zstd-rs/tree/main/zstd-safe/zstd-sys/wasm-shim

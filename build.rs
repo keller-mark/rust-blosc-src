@@ -69,5 +69,23 @@ fn main() {
     } else {
         "blosc"
     };
+
+    // Reference: https://github.com/gyscos/zstd-rs/blob/87cce797c6da5942c5470efc57709a80d3cb6ea3/zstd-safe/zstd-sys/build.rs#L147
+    // List out the WASM targets that need wasm-shim.
+    // Note that Emscripten already provides its own C standard library so
+    // wasm32-unknown-emscripten should not be included here.
+    // See: https://github.com/gyscos/zstd-rs/pull/209
+    let need_wasm_shim = !cfg!(feature = "no_wasm_shim")
+        && env::var("TARGET").map_or(false, |target| {
+            target == "wasm32-unknown-unknown"
+                || target.starts_with("wasm32-wasi")
+        });
+
+    if need_wasm_shim {
+        build.include("wasm-shim/");
+    }
+
+
+
     build.compile(linklib);
 }
