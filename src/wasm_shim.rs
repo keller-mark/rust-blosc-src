@@ -1,45 +1,151 @@
 // Reference: https://github.com/gyscos/zstd-rs/blob/main/zstd-safe/zstd-sys/src/wasm_shim.rs
-use std::alloc::{alloc, alloc_zeroed, dealloc, Layout};
-use std::ffi::{c_void, c_char, c_int};
-use std::ptr;
+use alloc::alloc::{alloc, alloc_zeroed, dealloc, Layout};
+use core::ffi::{c_void, c_char, c_int};
+use core::ptr;
 
 // Use 16 for alignment to be safe for SIMD/doubles (similar to max_align_t)
-const ALIGN: usize = 16;
-const HEADER_SIZE: usize = 16;
+const USIZE_ALIGN: usize = core::mem::align_of::<usize>();
+const USIZE_SIZE: usize = core::mem::size_of::<usize>();
 
 #[no_mangle]
-pub unsafe extern "C" fn rust_zstd_wasm_shim_malloc(size: usize) -> *mut c_void {
-    let layout = Layout::from_size_align_unchecked(size + HEADER_SIZE, ALIGN);
-    let ptr = alloc(layout);
-    if ptr.is_null() {
-        return ptr::null_mut();
+pub unsafe extern "C" fn rust_zstd_wasm_shim_qsort(
+    base: *mut c_void,
+    n_items: usize,
+    size: usize,
+    compar: extern "C" fn(*const c_void, *const c_void) -> c_int,
+) {
+    unsafe {
+        match size {
+            1 => qsort::<1>(base, n_items, compar),
+            2 => qsort::<2>(base, n_items, compar),
+            4 => qsort::<4>(base, n_items, compar),
+            8 => qsort::<8>(base, n_items, compar),
+            16 => qsort::<16>(base, n_items, compar),
+            _ => panic!("Unsupported qsort item size"),
+        }
     }
-    *(ptr as *mut usize) = size;
-    ptr.add(HEADER_SIZE) as *mut c_void
+}
+
+unsafe fn qsort<const N: usize>(
+    base: *mut c_void,
+    n_items: usize,
+    compar: extern "C" fn(*const c_void, *const c_void) -> c_int,
+) {
+    let base: &mut [[u8; N]] =
+        core::slice::from_raw_parts_mut(base as *mut [u8; N], n_items);
+    base.sort_unstable_by(|a, b| {
+        match compar(a.as_ptr() as *const c_void, b.as_ptr() as *const c_void)
+        {
+            ..=-1 => core::cmp::Ordering::Less,
+            0 => core::cmp::Ordering::Equal,
+            1.. => core::cmp::Ordering::Greater,
+        }
+    });
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn rust_zstd_wasm_shim_calloc(nmemb: usize, size: usize) -> *mut c_void {
-    let total_size = nmemb * size;
-    let layout = Layout::from_size_align_unchecked(total_size + HEADER_SIZE, ALIGN);
-    let ptr = alloc_zeroed(layout);
-    if ptr.is_null() {
-        return ptr::null_mut();
+pub unsafe extern "C" fn rust_zstd_wasm_shim_malloc(size: usize) -> *mut c_void {
+    wasm_shim_alloc::<false>(size)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_zstd_wasm_shim_memcmp(
+    str1: *const c_void,
+    str2: *const c_void,
+    n: usize,
+) -> i32 {
+    // Safety: function contracts requires str1 and str2 at least `n`-long.
+    unsafe {
+        let str1: &[u8] = core::slice::from_raw_parts(str1 as *const u8, n);
+        let str2: &[u8] = core::slice::from_raw_parts(str2 as *const u8, n);
+        match str1.cmp(str2) {
+            core::cmp::Ordering::Less => -1,
+            core::cmp::Ordering::Equal => 0,
+            core::cmp::Ordering::Greater => 1,
+        }
     }
-    *(ptr as *mut usize) = total_size;
-    ptr.add(HEADER_SIZE) as *mut c_void
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_zstd_wasm_shim_calloc(
+    nmemb: usize,
+    size: usize,
+) -> *mut c_void {
+    // note: calloc expects the allocation to be zeroed
+    wasm_shim_alloc::<true>(nmemb * size)
+}
+
+#[inline]
+fn wasm_shim_alloc<const ZEROED: bool>(size: usize) -> *mut c_void {
+    // in order to recover the size upon free, we store the size below the allocation
+    // special alignment is never requested via the malloc API,
+    // so it's not stored, and usize-alignment is used
+    // memory layout: [size] [allocation]
+
+    let full_alloc_size = size + USIZE_SIZE;
+
+    unsafe {
+        let layout =
+            Layout::from_size_align_unchecked(full_alloc_size, USIZE_ALIGN);
+
+        let ptr = if ZEROED {
+            alloc_zeroed(layout)
+        } else {
+            alloc(layout)
+        };
+
+        // SAFETY: ptr is usize-aligned and we've allocated sufficient memory
+        ptr.cast::<usize>().write(full_alloc_size);
+
+        ptr.add(USIZE_SIZE).cast()
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_free(ptr: *mut c_void) {
-    if ptr.is_null() {
-        return;
-    }
-    let real_ptr = (ptr as *mut u8).sub(HEADER_SIZE);
-    let size = *(real_ptr as *mut usize);
-    let layout = Layout::from_size_align_unchecked(size + HEADER_SIZE, ALIGN);
-    dealloc(real_ptr, layout);
+    // the layout for the allocation needs to be recovered for dealloc
+    // - the size must be recovered from directly below the allocation
+    // - the alignment will always by USIZE_ALIGN
+
+    let alloc_ptr = ptr.sub(USIZE_SIZE);
+    // SAFETY: the allocation routines must uphold having a valid usize below the provided pointer
+    let full_alloc_size = alloc_ptr.cast::<usize>().read();
+
+    let layout =
+        Layout::from_size_align_unchecked(full_alloc_size, USIZE_ALIGN);
+    dealloc(alloc_ptr.cast(), layout);
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_zstd_wasm_shim_memcpy(
+    dest: *mut c_void,
+    src: *const c_void,
+    n: usize,
+) -> *mut c_void {
+    core::ptr::copy_nonoverlapping(src as *const u8, dest as *mut u8, n);
+    dest
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_zstd_wasm_shim_memmove(
+    dest: *mut c_void,
+    src: *const c_void,
+    n: usize,
+) -> *mut c_void {
+    core::ptr::copy(src as *const u8, dest as *mut u8, n);
+    dest
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_zstd_wasm_shim_memset(
+    dest: *mut c_void,
+    c: c_int,
+    n: usize,
+) -> *mut c_void {
+    core::ptr::write_bytes(dest as *mut u8, c as u8, n);
+    dest
+}
+
 
 #[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_getenv(_name: *const c_char) -> *mut c_char {
@@ -91,88 +197,6 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strtol(
     }
 
     (result * sign) as i32
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn rust_zstd_wasm_shim_qsort(
-    base: *mut c_void,
-    nitems: usize,
-    size: usize,
-    compar: Option<unsafe extern "C" fn(*const c_void, *const c_void) -> c_int>,
-) {
-    if nitems < 2 || size == 0 {
-        return;
-    }
-    let compar = compar.expect("compar function cannot be null");
-
-    // Insertion sort: simple, robust, and sufficient for small arrays (like Huffman tables)
-    let base = base as *mut u8;
-    let tmp = alloc(Layout::from_size_align_unchecked(size, 1));
-
-    for i in 1..nitems {
-        let mut j = i;
-        while j > 0 {
-            let ptr_j_minus_1 = base.add((j - 1) * size);
-            let ptr_j = base.add(j * size);
-
-            if compar(ptr_j_minus_1 as *const c_void, ptr_j as *const c_void) > 0 {
-                // swap
-                ptr::copy_nonoverlapping(ptr_j_minus_1, tmp, size);
-                ptr::copy_nonoverlapping(ptr_j, ptr_j_minus_1, size);
-                ptr::copy_nonoverlapping(tmp, ptr_j, size);
-                j -= 1;
-            } else {
-                break;
-            }
-        }
-    }
-    dealloc(tmp, Layout::from_size_align_unchecked(size, 1));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn rust_zstd_wasm_shim_memcmp(
-    s1: *const c_void,
-    s2: *const c_void,
-    n: usize,
-) -> c_int {
-    let s1 = std::slice::from_raw_parts(s1 as *const u8, n);
-    let s2 = std::slice::from_raw_parts(s2 as *const u8, n);
-    for (&a, &b) in s1.iter().zip(s2.iter()) {
-        if a != b {
-            return (a as c_int) - (b as c_int);
-        }
-    }
-    0
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn rust_zstd_wasm_shim_memcpy(
-    dest: *mut c_void,
-    src: *const c_void,
-    n: usize,
-) -> *mut c_void {
-    ptr::copy_nonoverlapping(src as *const u8, dest as *mut u8, n);
-    dest
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn rust_zstd_wasm_shim_memmove(
-    dest: *mut c_void,
-    src: *const c_void,
-    n: usize,
-) -> *mut c_void {
-    ptr::copy(src as *const u8, dest as *mut u8, n);
-    dest
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn rust_zstd_wasm_shim_memset(
-    dest: *mut c_void,
-    c: c_int,
-    n: usize,
-) -> *mut c_void {
-    ptr::write_bytes(dest as *mut u8, c as u8, n);
-    dest
 }
 
 #[no_mangle]
