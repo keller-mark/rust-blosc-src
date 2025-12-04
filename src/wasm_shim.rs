@@ -1,7 +1,11 @@
 // Reference: https://github.com/gyscos/zstd-rs/blob/main/zstd-safe/zstd-sys/src/wasm_shim.rs
 use alloc::alloc::{alloc, alloc_zeroed, dealloc, Layout};
-use core::ffi::{c_void, c_char, c_int};
+use core::ffi::{c_void, c_char, c_int, CStr};
 use core::ptr;
+
+// To use web_sys, add the following to your Cargo.toml:
+// [dependencies]
+// web-sys = { version = "0.3", features = ["console"] }
 
 // Use 16 for alignment to be safe for SIMD/doubles (similar to max_align_t)
 const USIZE_ALIGN: usize = core::mem::align_of::<usize>();
@@ -15,6 +19,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_qsort(
     size: usize,
     compar: extern "C" fn(*const c_void, *const c_void) -> c_int,
 ) {
+    web_sys::console::log_1(&alloc::format!("qsort(base: {:?}, n_items: {}, size: {})", base, n_items, size).into());
     if base.is_null() || n_items == 0 {
         return;
     }
@@ -81,6 +86,7 @@ unsafe fn qsort<const N: usize>(
 
 //#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_malloc(size: usize) -> *mut c_void {
+    web_sys::console::log_1(&alloc::format!("malloc(size: {})", size).into());
     wasm_shim_alloc::<false>(size)
 }
 
@@ -90,8 +96,14 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memcmp(
     str2: *const c_void,
     n: usize,
 ) -> i32 {
+    web_sys::console::log_1(&alloc::format!("memcmp(str1: {:?}, str2: {:?}, n: {})", str1, str2, n).into());
     if n == 0 {
         return 0;
+    }
+    if str1.is_null() || str2.is_null() {
+        // C memcmp is UB on null pointers. We'll define it as non-equal.
+        // A null pointer is "less than" a non-null one.
+        return (str1 as isize - str2 as isize) as i32;
     }
     // Safety: function contracts requires str1 and str2 at least `n`-long.
     unsafe {
@@ -110,6 +122,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_calloc(
     nmemb: usize,
     size: usize,
 ) -> *mut c_void {
+    web_sys::console::log_1(&alloc::format!("calloc(nmemb: {}, size: {})", nmemb, size).into());
     // note: calloc expects the allocation to be zeroed
     let size = match nmemb.checked_mul(size) {
         Some(s) => s,
@@ -153,6 +166,7 @@ fn wasm_shim_alloc<const ZEROED: bool>(size: usize) -> *mut c_void {
 
 //#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_free(ptr: *mut c_void) {
+    web_sys::console::log_1(&alloc::format!("free(ptr: {:?})", ptr).into());
     if ptr.is_null() {
         return;
     }
@@ -176,6 +190,10 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memcpy(
     src: *const c_void,
     n: usize,
 ) -> *mut c_void {
+    web_sys::console::log_1(&alloc::format!("memcpy(dest: {:?}, src: {:?}, n: {})", dest, src, n).into());
+    if n == 0 || dest.is_null() || src.is_null() {
+        return dest;
+    }
     core::ptr::copy_nonoverlapping(src as *const u8, dest as *mut u8, n);
     dest
 }
@@ -186,6 +204,10 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memmove(
     src: *const c_void,
     n: usize,
 ) -> *mut c_void {
+    web_sys::console::log_1(&alloc::format!("memmove(dest: {:?}, src: {:?}, n: {})", dest, src, n).into());
+    if n == 0 || dest.is_null() || src.is_null() {
+        return dest;
+    }
     core::ptr::copy(src as *const u8, dest as *mut u8, n);
     dest
 }
@@ -196,6 +218,10 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memset(
     c: c_int,
     n: usize,
 ) -> *mut c_void {
+    web_sys::console::log_1(&alloc::format!("memset(dest: {:?}, c: {}, n: {})", dest, c, n).into());
+    if n == 0 || dest.is_null() {
+        return dest;
+    }
     core::ptr::write_bytes(dest as *mut u8, c as u8, n);
     dest
 }
@@ -206,6 +232,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memset(
 
 #[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_getenv(_name: *const c_char) -> *mut c_char {
+    web_sys::console::log_1(&alloc::format!("getenv(name: {:?})", _name).into());
     ptr::null_mut()
 }
 
@@ -215,6 +242,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strtol(
     endptr: *mut *mut c_char,
     base: c_int,
 ) -> i32 {
+    web_sys::console::log_1(&alloc::format!("strtol(str: {:?}, base: {})", str, base).into());
     if str.is_null() {
         return 0;
     }
@@ -265,6 +293,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strcat(
     dest: *mut c_char,
     src: *const c_char,
 ) -> *mut c_char {
+    web_sys::console::log_1(&alloc::format!("strcat(dest: {:?}, src: {:?})", dest, src).into());
     if dest.is_null() || src.is_null() {
         return dest;
     }
@@ -284,6 +313,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strcat(
 
 #[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_strdup(s: *const c_char) -> *mut c_char {
+    web_sys::console::log_1(&alloc::format!("strdup(s: {:?})", s).into());
     if s.is_null() {
         return ptr::null_mut();
     }
@@ -306,15 +336,29 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strcmp(
     s2: *const c_char,
 ) -> c_int {
     if s1.is_null() || s2.is_null() {
-        return 0;
+        // Log null pointers and return based on pointer comparison
+        web_sys::console::log_1(&alloc::format!("strcmp(s1: {:?}, s2: {:?})", s1, s2).into());
+        return (s1 as isize - s2 as isize) as c_int;
     }
-    let mut s1 = s1 as *const u8;
-    let mut s2 = s2 as *const u8;
-    while *s1 != 0 && *s1 == *s2 {
-        s1 = s1.add(1);
-        s2 = s2.add(1);
+
+    // Both pointers are non-null, so we can safely create CStr
+    let s1_cstr = CStr::from_ptr(s1);
+    let s2_cstr = CStr::from_ptr(s2);
+
+    // For logging, convert to Rust &str, with a fallback for invalid UTF-8
+    let s1_log_str = s1_cstr.to_str().unwrap_or("<invalid_utf8>");
+    let s2_log_str = s2_cstr.to_str().unwrap_or("<invalid_utf8>");
+    web_sys::console::log_1(&alloc::format!("strcmp(s1: \"{}\", s2: \"{}\")", s1_log_str, s2_log_str).into());
+
+    // strcmp compares bytes, not UTF-8 characters, so use as_bytes()
+    let s1_bytes = s1_cstr.to_bytes();
+    let s2_bytes = s2_cstr.to_bytes();
+
+    match s1_bytes.cmp(s2_bytes) {
+        core::cmp::Ordering::Less => -1,
+        core::cmp::Ordering::Equal => 0,
+        core::cmp::Ordering::Greater => 1,
     }
-    (*s1 as c_int) - (*s2 as c_int)
 }
 
 #[no_mangle]
@@ -322,6 +366,7 @@ pub unsafe extern "C" fn sprintf(
     dest: *mut c_char,
     format: *const c_char,
 ) -> c_int {
+    web_sys::console::log_1(&alloc::format!("sprintf(dest: {:?}, format: {:?})", dest, format).into());
     if dest.is_null() || format.is_null() {
         return 0;
     }

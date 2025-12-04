@@ -86,7 +86,5 @@ fn main() {
         build.include("wasm-shim/sys/");
     }
 
-
-
     build.compile(linklib);
 }

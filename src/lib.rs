@@ -18,7 +18,7 @@ include!("bindgen.rs");
 extern crate libz_sys;
 
 #[cfg(feature = "zstd")]
-extern crate zstd_sys;
+extern crate zstd_safe;
 
 #[cfg(feature = "lz4")]
 extern crate lz4_sys;

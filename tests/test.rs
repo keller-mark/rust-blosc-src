@@ -1,4 +1,11 @@
+#![cfg(target_arch = "wasm32")]
+
+use wasm_bindgen::prelude::*;
+use wasm_bindgen_test::*;
 use blosc_src::*;
+
+
+wasm_bindgen_test_configure!(run_in_browser);
 
 fn compressors_available() -> Vec<&'static [u8]> {
     let mut compressors: Vec<&[u8]> = vec![];
@@ -14,8 +21,9 @@ fn compressors_available() -> Vec<&'static [u8]> {
     compressors
 }
 
-#[test]
-fn roundtrip() {
+#[wasm_bindgen_test]
+#[wasm_bindgen]
+pub fn test_roundtrip() {
     unsafe {
         let text =
             "I am here writing some very cool and novel words which I will compress and decompress";
@@ -53,8 +61,9 @@ fn roundtrip() {
     }
 }
 
-#[test]
-fn floats_roundtrip() {
+#[wasm_bindgen_test]
+#[wasm_bindgen]
+pub fn test_floats_roundtrip() {
     // generate numerical data
     let src: Vec<f32> = (0..10000)
         .map(|num| ((num * 8923) % 100) as f32 / 2f32) // multiply by big prime number
@@ -117,4 +126,8 @@ fn floats_roundtrip() {
         // check if the values in both arrays are equal
         assert_eq!(src, result);
     }
+}
+
+fn main() {
+    // This main function is required to make `wasm-pack` happy.
 }
