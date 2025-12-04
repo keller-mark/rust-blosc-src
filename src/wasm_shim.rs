@@ -7,7 +7,8 @@ use core::ptr;
 const USIZE_ALIGN: usize = core::mem::align_of::<usize>();
 const USIZE_SIZE: usize = core::mem::size_of::<usize>();
 
-#[no_mangle]
+
+//#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_qsort(
     base: *mut c_void,
     n_items: usize,
@@ -43,12 +44,12 @@ unsafe fn qsort<const N: usize>(
     });
 }
 
-#[no_mangle]
+//#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_malloc(size: usize) -> *mut c_void {
     wasm_shim_alloc::<false>(size)
 }
 
-#[no_mangle]
+//#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_memcmp(
     str1: *const c_void,
     str2: *const c_void,
@@ -66,7 +67,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memcmp(
     }
 }
 
-#[no_mangle]
+//#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_calloc(
     nmemb: usize,
     size: usize,
@@ -101,7 +102,7 @@ fn wasm_shim_alloc<const ZEROED: bool>(size: usize) -> *mut c_void {
     }
 }
 
-#[no_mangle]
+//#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_free(ptr: *mut c_void) {
     // the layout for the allocation needs to be recovered for dealloc
     // - the size must be recovered from directly below the allocation
@@ -116,7 +117,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_free(ptr: *mut c_void) {
     dealloc(alloc_ptr.cast(), layout);
 }
 
-#[no_mangle]
+//#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_memcpy(
     dest: *mut c_void,
     src: *const c_void,
@@ -126,7 +127,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memcpy(
     dest
 }
 
-#[no_mangle]
+//#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_memmove(
     dest: *mut c_void,
     src: *const c_void,
@@ -136,7 +137,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memmove(
     dest
 }
 
-#[no_mangle]
+//#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_memset(
     dest: *mut c_void,
     c: c_int,
@@ -146,6 +147,9 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memset(
     dest
 }
 
+
+
+// END FUNCTIONS FROM zstd-sys WASM SHIM
 
 #[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_getenv(_name: *const c_char) -> *mut c_char {

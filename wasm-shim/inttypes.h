@@ -1,5 +1,5 @@
-#ifndef _INTTYPES_H
-#define _INTTYPES_H
+#ifndef _BLOSC_INTTYPES_H
+#define _BLOSC_INTTYPES_H	1
 
 #include <stdint.h>
 
@@ -50,4 +50,4 @@ uintmax_t strtoumax(const char* nptr, char** endptr, int base);
 }
 #endif
 
-#endif /* _INTTYPES_H */
+#endif /* _BLOSC_INTTYPES_H */

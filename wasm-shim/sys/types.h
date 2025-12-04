@@ -1,5 +1,5 @@
-#ifndef _SYS_TYPES_H
-#define _SYS_TYPES_H
+#ifndef _BLOSC_SYS_TYPES_H
+#define _BLOSC_SYS_TYPES_H	1
 
 #include <stddef.h>
 #include <stdint.h>

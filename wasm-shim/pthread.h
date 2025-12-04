@@ -1,5 +1,5 @@
-#ifndef PTHREAD_H
-#define PTHREAD_H
+#ifndef _BLOSC_PTHREAD_H
+#define _BLOSC_PTHREAD_H	1
 
 #ifdef __cplusplus
 extern "C" {
@@ -143,4 +143,4 @@ static inline int pthread_attr_setdetachstate(pthread_attr_t *attr, int detachst
 }
 #endif
 
-#endif /* PTHREAD_H */
+#endif /* _BLOSC_PTHREAD_H */

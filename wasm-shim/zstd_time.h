@@ -1,5 +1,6 @@
+#define _TIME_H 1
 #ifndef _TIME_H
-#define _TIME_H
+#define _TIME_H 1
 
 #define CLOCKS_PER_SEC 1000
 
