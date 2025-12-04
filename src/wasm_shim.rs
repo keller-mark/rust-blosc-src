@@ -15,6 +15,9 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_qsort(
     size: usize,
     compar: extern "C" fn(*const c_void, *const c_void) -> c_int,
 ) {
+    if base.is_null() || n_items == 0 {
+        return;
+    }
     unsafe {
         match size {
             1 => qsort::<1>(base, n_items, compar),
@@ -22,7 +25,39 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_qsort(
             4 => qsort::<4>(base, n_items, compar),
             8 => qsort::<8>(base, n_items, compar),
             16 => qsort::<16>(base, n_items, compar),
-            _ => panic!("Unsupported qsort item size"),
+            _ => qsort_fallback(base, n_items, size, compar),
+        }
+    }
+}
+
+unsafe fn qsort_fallback(
+    base: *mut c_void,
+    n_items: usize,
+    size: usize,
+    compar: extern "C" fn(*const c_void, *const c_void) -> c_int,
+) {
+    // Fallback insertion sort for arbitrary item sizes.
+    // Not as fast as quicksort, but avoids code bloat and works for any size.
+    let base = base as *mut u8;
+    if n_items < 2 {
+        return;
+    }
+
+    for i in 1..n_items {
+        let mut j = i;
+        while j > 0 {
+            let p_curr = base.add(j * size);
+            let p_prev = base.add((j - 1) * size);
+
+            // Compare (j-1) and j
+            let cmp = compar(p_prev as *const c_void, p_curr as *const c_void);
+            if cmp > 0 {
+                // Swap if prev > curr
+                ptr::swap_nonoverlapping(p_prev, p_curr, size);
+                j -= 1;
+            } else {
+                break;
+            }
         }
     }
 }
@@ -55,6 +90,9 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_memcmp(
     str2: *const c_void,
     n: usize,
 ) -> i32 {
+    if n == 0 {
+        return 0;
+    }
     // Safety: function contracts requires str1 and str2 at least `n`-long.
     unsafe {
         let str1: &[u8] = core::slice::from_raw_parts(str1 as *const u8, n);
@@ -73,7 +111,11 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_calloc(
     size: usize,
 ) -> *mut c_void {
     // note: calloc expects the allocation to be zeroed
-    wasm_shim_alloc::<true>(nmemb * size)
+    let size = match nmemb.checked_mul(size) {
+        Some(s) => s,
+        None => return ptr::null_mut(),
+    };
+    wasm_shim_alloc::<true>(size)
 }
 
 #[inline]
@@ -83,7 +125,10 @@ fn wasm_shim_alloc<const ZEROED: bool>(size: usize) -> *mut c_void {
     // so it's not stored, and usize-alignment is used
     // memory layout: [size] [allocation]
 
-    let full_alloc_size = size + USIZE_SIZE;
+    let full_alloc_size = match size.checked_add(USIZE_SIZE) {
+        Some(s) => s,
+        None => return ptr::null_mut(),
+    };
 
     unsafe {
         let layout =
@@ -95,6 +140,10 @@ fn wasm_shim_alloc<const ZEROED: bool>(size: usize) -> *mut c_void {
             alloc(layout)
         };
 
+        if ptr.is_null() {
+            return ptr::null_mut();
+        }
+
         // SAFETY: ptr is usize-aligned and we've allocated sufficient memory
         ptr.cast::<usize>().write(full_alloc_size);
 
@@ -104,6 +153,10 @@ fn wasm_shim_alloc<const ZEROED: bool>(size: usize) -> *mut c_void {
 
 //#[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_free(ptr: *mut c_void) {
+    if ptr.is_null() {
+        return;
+    }
+
     // the layout for the allocation needs to be recovered for dealloc
     // - the size must be recovered from directly below the allocation
     // - the alignment will always by USIZE_ALIGN
@@ -162,6 +215,10 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strtol(
     endptr: *mut *mut c_char,
     base: c_int,
 ) -> i32 {
+    if str.is_null() {
+        return 0;
+    }
+
     let mut current = str as *const u8;
 
     // Skip whitespace
@@ -192,7 +249,7 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strtol(
             break;
         }
 
-        result = result * (radix as i64) + (digit as i64);
+        result = result.wrapping_mul(radix as i64).wrapping_add(digit as i64);
         current = current.add(1);
     }
 
@@ -208,6 +265,9 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strcat(
     dest: *mut c_char,
     src: *const c_char,
 ) -> *mut c_char {
+    if dest.is_null() || src.is_null() {
+        return dest;
+    }
     let mut d = dest;
     while *d != 0 {
         d = d.add(1);
@@ -224,6 +284,9 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strcat(
 
 #[no_mangle]
 pub unsafe extern "C" fn rust_zstd_wasm_shim_strdup(s: *const c_char) -> *mut c_char {
+    if s.is_null() {
+        return ptr::null_mut();
+    }
     let mut len = 0;
     while *s.add(len) != 0 {
         len += 1;
@@ -242,6 +305,9 @@ pub unsafe extern "C" fn rust_zstd_wasm_shim_strcmp(
     s1: *const c_char,
     s2: *const c_char,
 ) -> c_int {
+    if s1.is_null() || s2.is_null() {
+        return 0;
+    }
     let mut s1 = s1 as *const u8;
     let mut s2 = s2 as *const u8;
     while *s1 != 0 && *s1 == *s2 {
@@ -256,6 +322,9 @@ pub unsafe extern "C" fn sprintf(
     dest: *mut c_char,
     format: *const c_char,
 ) -> c_int {
+    if dest.is_null() || format.is_null() {
+        return 0;
+    }
     // Simple implementation: copy format string to dest, ignoring format specifiers and arguments.
     // This avoids the need for variadic support in Rust, which is unstable/complex for WASM targets.
     let mut src = format as *const u8;

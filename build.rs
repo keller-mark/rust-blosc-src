@@ -83,6 +83,7 @@ fn main() {
 
     if need_wasm_shim {
         build.include("wasm-shim/");
+        build.include("wasm-shim/sys/");
     }
 
 
